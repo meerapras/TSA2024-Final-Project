@@ -86,24 +86,14 @@ scrape.it<-function(the_year){
 
 
 ```{r Scrape Data - Jan to Sep}
-df_2005<-scrape.it(2005)
-df_2006<-scrape.it(2006)
-df_2007<-scrape.it(2007)
-df_2008<-scrape.it(2008)
-df_2009<-scrape.it(2009)
-df_2010<-scrape.it(2010)
-df_2011<-scrape.it(2011)
-df_2012<-scrape.it(2012)
-df_2013<-scrape.it(2013)
-df_2014<-scrape.it(2014)
-df_2015<-scrape.it(2015)
-df_2016<-scrape.it(2016)
-df_2017<-scrape.it(2017)
-df_2018<-scrape.it(2018)
-df_2019<-scrape.it(2019)
-df_2020<-scrape.it(2020)
-df_2021<-scrape.it(2021)
-df_2022<-scrape.it(2022)
+#Use lapply to apply the scrape 
+the_years = rep(2005:2021)
+the_dfs <-lapply(X=the_years,
+                 FUN=scrape.it)
+
+#Conflate the returned dataframes into a single dataframe
+the_df <- bind_rows(the_dfs)
+
 ```
 
 ```{r Fetch the website resource - Location}
@@ -140,25 +130,4 @@ scrape.it_2<-function(the_year){
            Dec=!!the_Dec)
   return(df_precipitation)
 }
-```
-
-```{r Scrape Data - Oct to Dec}
-df_2004_2<-scrape.it_2(2005)
-df_2005_2<-scrape.it_2(2006)
-df_2006_2<-scrape.it_2(2007)
-df_2007_2<-scrape.it_2(2008)
-df_2008_2<-scrape.it_2(2009)
-df_2009_2<-scrape.it_2(2010)
-df_2010_2<-scrape.it_2(2011)
-df_2011_2<-scrape.it_2(2012)
-df_2012_2<-scrape.it_2(2013)
-df_2013_2<-scrape.it_2(2014)
-df_2014_2<-scrape.it_2(2015)
-df_2015_2<-scrape.it_2(2016)
-df_2016_2<-scrape.it_2(2017)
-df_2017_2<-scrape.it_2(2018)
-df_2018_2<-scrape.it_2(2019)
-df_2019_2<-scrape.it_2(2020)
-df_2020_2<-scrape.it_2(2021)
-df_2021_2<-scrape.it_2(2022)
 ```
