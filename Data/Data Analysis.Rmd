@@ -50,52 +50,108 @@ library(corrplot)
 
 ```{r Import Data, echo=TRUE, results='hide'}
 here()
-df_water<-read.csv(here('Data/Processed/groundwater_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
-df_preci<-read.csv(here('Data/Processed/preci_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
-df_temp<-read.csv(here('Data/Processed/temp_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+raw_water<-read.csv(here('Data/Processed/groundwater_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+raw_preci<-read.csv(here('Data/Processed/preci_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+raw_temp<-read.csv(here('Data/Processed/temp_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
 
-df_water<-df_water[,2:10]
-df_preci<-df_preci[,2:3]
-df_temp<-df_temp[,2:3]
+raw_water<-raw_water[,2:10]
+raw_preci<-raw_preci[,2:3]
+raw_temp<-raw_temp[,2:3]
 ```
 
-```{r Data Wwrangling}
+```{r Data Wrangling}
 #date format 
-df_water$Date<-ymd(df_water$Date)
-df_temp$Date<-ymd(df_temp$Date)
-df_preci$Date<-ymd(df_preci$Dat)
+raw_water$Date<-ymd(raw_water$Date)
+raw_temp$Date<-ymd(raw_temp$Date)
+raw_preci$Date<-ymd(raw_preci$Dat)
 
 #daily average 
-df_water_daily<-df_water %>%
+df_water<-raw_water %>%
   group_by(Date) %>%
   summarize(water=mean(Groundwater_level, na.rm=TRUE)) 
 
 #check timeframe 
-print(head(df_water$Date,1)) #1990-01-16
+print(head(df_water$Date,1)) #1993-02-01
 print(tail(df_water$Date,1)) #2022-01-26
-print(head(df_temp$Date,1)) #1990-01-01
-print(tail(df_temp$Date,1)) #2024-03-01
+print(head(raw_temp$Date,1)) #1990-01-01
+print(tail(raw_temp$Date,1)) #2024-03-01
 
 #merge precipitation dataframe and temperature dataframe 
-df_exogenous<-left_join(df_temp,df_preci,by="Date")
-df_exogenous_processed<-df_exogenous %>%
-  filter(Date>=ymd("1990-01-16") & Date<=ymd("2022-01-26"))
+raw_temp_preci<-left_join(raw_temp,raw_preci,by="Date")
 
 #missing data
 #create time dataframe
-start_time<-ymd("1990-01-16")
+start_time<-ymd("1993-02-01")
 end_time<-ymd("2022-01-26")
-df_time<-data.frame(Date=seq(from=start_time, to=end_time, by="1 day"))
+df_time_daily<-data.frame(Date=seq(from=start_time, to=end_time, by="1 day"))
+df_time_monthly<-data.frame(Date=seq(from=start_time, to=end_time, by="1 month"))
 
 #merge dataframe
-df_water_merge<-left_join(df_time,df_water,by="Date")
-df_exogenous_processed_merge<-left_join(df_time,df_exogenous_processed,by="Date")
+df_water_merge<-left_join(df_time_daily,df_water,by="Date")
+df_temp_preci_merge<-left_join(df_time_monthly,raw_temp_preci,by="Date")
 head(df_water_merge)
-head(df_exogenous_processed_merge)
+head(df_temp_preci_merge)
 
 #filter missing data
-df_water_merge %>%
-  filter(is.na(Groundwater_level)) #omit data before 1990-02
-df_exogenous_processed_merge %>%
-  filter(is.na(Temperature)) #omit data before 1993
+df_water_missing<-df_water_merge %>%
+  filter(is.na(water))  #continuous data since 2001-03-01
+df_temp_preci_merge %>%
+  filter(is.na(Temperature)) #no missing value 
+
+#drop the missing value 
+df_water<-df_water_merge %>%
+  filter(Date>=ymd("2001-03-01") & Date<=ymd("2021-10-22"))
+df_temp_preci<-df_temp_preci_merge %>%
+  filter(Date>=ymd("2001-03-01")& Date<=ymd("2021-10-22"))
+
+#water is daily data
+#temp and preci are monthly data
+```
+
+```{r Create time series object}
+#water
+msts_water<-msts(df_water[,2],seasonal.periods=c(7,365),start =c(2001,03,01), end=c(2021,10,22))
+autoplot(msts_water)
+```
+```{r ACF and PACF}
+#water
+par(mfrow=c(1,2))
+Acf(msts_water,lag.max=40,main=paste("ACF for Groundwater"),ylim=c(-0.5,1)) 
+Pacf(msts_water,lag.max=40,main=paste("PACF for Groundwater"),ylim=c(-0.5,1))
+```
+
+```{r Detrend and deseason}
+#decompose 
+water_decompose<-decompose(msts_water)
+plot(water_decompose)
+
+#deseason
+water_deseason<-seasadj(water_decompose)
+plot_grid(
+  autoplot(water_deseason),
+  autoplot(Acf(water_deseason,plot=FALSE,lag.max=40)),
+  autoplot(Pacf(water_deseason,plot=FALSE,lag.max=40)),
+  nrow=1
+)
+```
+
+```{r Stationary test}
+#Mann-Kendall
+summary(MannKendall(water_deseason)) #reject the null hypothesis, supporting the presence of a trend
+
+#seasonal Mann-Kendall
+#correction: calculate monthly average 
+trend::smk.test(water_deseason) 
+
+
+#ADF test
+print(adf.test(water_deseason,alternative = "stationary")) #reject the null hypothesis, the trend is stationary 
+```
+
+```{r Differencing}
+#find out how many times is needed for differencing 
+ns_diff<-nsdiffs(water_deseason)
+cat("Number of seasonal differencing needed:", ns_diff) #no need to difference the series
+
+#check: does not need to difference the series but has trend in the data
 ```
