@@ -1,0 +1,134 @@
+---
+title: "Data Wrangling"
+author: "Ina Liao"
+date: "2024-04-10"
+output: html_document
+---
+
+
+```{r Setup, include=FALSE}
+knitr:::opts_chunk$set(tidy.opts=list(width.cutoff=80), tidy=FALSE,fig.align = "center", dev = "cairo_pdf", fig.pos = "H")
+```
+
+```{r Install packages, message=FALSE}
+#install.packages("lubridate")
+#install.packages("ggplot2")
+#install.packages("forecast")
+#install.packages("here")
+#install.packages("knitr")
+#install.packages("kableExtra")
+#install.packages("dplyr")
+#install.packages("tidyr")
+library(lubridate)
+library(ggplot2)
+library(forecast) 
+library(here)
+library(knitr)
+library(kableExtra)
+library(dplyr)
+library(tidyr)
+```
+
+```{r Import Data, echo=TRUE, results='hide'}
+here()
+raw_site<-read.csv(here('Data/Raw/NGWMN_gwl_site_info.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+raw_water<-read.csv(here('Data/Raw/NGWMN_gwl_value.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+raw_temp<-read.csv(here('Data/Raw/temp_1990-2024_Pinal.csv'),stringsAsFactors = TRUE,skip=5,header=FALSE)
+raw_preci<-read.csv(here('Data/Raw/precipitation_1990-2024_Pinal.csv'),stringsAsFactors = TRUE,skip=5,header=FALSE)
+```
+
+```{r Select needed data}
+#site data
+#change the data type 
+for (i in 1:2){
+  raw_site[,i]<-as.character(raw_site[,i])
+}
+#select ADWR site 
+df_site<-raw_site %>%
+  filter(AGENCY_CD=="ADWR") %>%
+  select(AGENCY_CD,AGENCY_NM,DEC_LAT_VA,DEC_LONG_V,WELL_DEPTH,WELL_DEPT1,MY_SITEID) %>%
+  rename(Unit=WELL_DEPT1)
+head(df_site)
+#seperate MY_SITEID by :
+df_site_processed<-separate(df_site,MY_SITEID,into=c("AGENCY_CD","MY_SITEID"))
+head(df_site_processed)
+
+#precipitation data
+#add column name to the precipitation data
+colnames(raw_preci)<-c("Date","Precipitation","Anomaly")
+head(raw_preci)
+#create another date dataframe
+dates<-seq(as.Date("1990-01-01"),as.Date("2024-03-01"),by="month")
+df_preci<-raw_preci %>%
+  select(Precipitation) %>%
+  mutate(Date=dates)
+#chnage the column order 
+df_preci<-df_preci[,2:1]
+
+
+#temperature data
+#add column name to the precipitation data
+colnames(raw_temp)<-c("Date","Temperature","Anomaly")
+head(raw_temp)
+#temperature dataset and precipitation dataset have the same timeframe
+df_temp<-raw_temp %>%
+  select(Temperature) %>%
+  mutate(Date=dates)
+#chnage the column order 
+df_temp<-df_temp[,2:1]
+
+
+#groundwater 
+#change the column names
+colnames(raw_water)<-c("Date","Water","Unit","Site","AGENCY_CD","MY_SITEID")
+
+#change the date format
+raw_water$Date<-as.Date(raw_water$Date,format="%Y/%m/%d")
+#starting date: 2002-02-13
+#ending date: 2022-01-26
+
+#change the data type 
+for (i in 3:4){
+  raw_water[,i]<-as.character(raw_water[,i])
+}
+
+#select ADWR site 
+df_water<-raw_water %>%
+  filter(AGENCY_CD=="ADWR") 
+df_water<-df_water[order(as.Date(df_water$Date,format="%Y/%m/%d")),]
+
+```
+
+```{r Merge dataframe}
+#timeframe
+print(head(df_water$Date,1)) #"1950-03-13"
+print(tail(df_water$Date,1)) #"2022-01-26"
+print(head(df_temp$Date,1)) #"1990-01-01"
+print(tail(df_temp$Date,1)) #"2024-03-01"
+
+#timeframe: 1990-01-01 to 2022-01-26
+df_temp_processed<-df_temp %>%
+  filter(Date>=ymd("1990-01-01") & Date<=ymd("2022-01-26"))
+df_preci_processed<-df_preci %>%
+  filter(Date>=ymd("1990-01-01") & Date<=ymd("2022-01-26"))
+df_water_processed<-df_water %>%
+  filter(Date>=ymd("1990-01-01") & Date<=ymd("2022-01-26"))
+
+
+#merge site info and water dataframe
+df_water_merge<-left_join(df_water_processed,df_site_processed,by="MY_SITEID")
+head(df_water_merge)
+colnames(df_water_merge)
+df_water_site<-df_water_merge %>%
+  select(Date,Water,Unit.x,Site,AGENCY_CD.x,MY_SITEID,DEC_LAT_VA,DEC_LONG_V,WELL_DEPTH)
+colnames(df_water_site)<-c("Date","Groundwater_level","Unit","Site_all","Source","Site_ID","Longitude",
+                           "Latitude","Well_depth")
+head(df_water_site)
+```
+
+```{r Export Excel File}
+here()
+write.csv(df_water_site, "Data/Processed/groundwater_processed.csv", row.names = TRUE)
+write.csv(df_temp, "Data/Processed/temp_processed.csv", row.names = TRUE)
+write.csv(df_preci, "Data/Processed/preci_processed.csv", row.names = TRUE)
+```

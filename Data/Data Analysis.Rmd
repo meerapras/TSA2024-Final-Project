@@ -1,0 +1,101 @@
+---
+title: "Data Analysis"
+author: "Ina Liao"
+date: "2024-04-10"
+output: html_document
+---
+```{r Setup, include=FALSE}
+knitr:::opts_chunk$set(tidy.opts=list(width.cutoff=80), tidy=FALSE,fig.align = "center", dev = "cairo_pdf", fig.pos = "H")
+```
+
+```{r Install packages, message=FALSE}
+#install.packages("lubridate")
+#install.packages("ggplot2")
+#install.packages("forecast")
+#install.packages("here")
+#install.packages("knitr")
+#install.packages("kableExtra")
+#install.packages("dplyr")
+#install.packages("openxlsx")
+#install.packages("ggthemes")
+#install.packages("tidyr")
+#install.packages("GGally")
+#install.packages("tseries")
+#install.packages("blorr")
+#install.packages("car")
+#install.packages("corrplot")
+#install.packages("dlm")
+#install.packages("randomForest")
+#install.packages("Kendall")
+library(lubridate)
+library(ggplot2)
+library(forecast) 
+library(here)
+library(knitr)
+library(kableExtra)
+library(dplyr)
+library(openxlsx)
+library(ggthemes)
+library(tidyr)
+library(Kendall)
+library(GGally)
+library(trend)
+library(tseries)
+library(blorr)   
+library(lmtest) 
+library(car)
+library(cowplot)
+library(corrplot)
+```
+
+```{r Import Data, echo=TRUE, results='hide'}
+here()
+df_water<-read.csv(here('Data/Processed/groundwater_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+df_preci<-read.csv(here('Data/Processed/preci_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+df_temp<-read.csv(here('Data/Processed/temp_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+
+df_water<-df_water[,2:10]
+df_preci<-df_preci[,2:3]
+df_temp<-df_temp[,2:3]
+```
+
+```{r Data Wwrangling}
+#date format 
+df_water$Date<-ymd(df_water$Date)
+df_temp$Date<-ymd(df_temp$Date)
+df_preci$Date<-ymd(df_preci$Dat)
+
+#daily average 
+df_water_daily<-df_water %>%
+  group_by(Date) %>%
+  summarize(water=mean(Groundwater_level, na.rm=TRUE)) 
+
+#check timeframe 
+print(head(df_water$Date,1)) #1990-01-16
+print(tail(df_water$Date,1)) #2022-01-26
+print(head(df_temp$Date,1)) #1990-01-01
+print(tail(df_temp$Date,1)) #2024-03-01
+
+#merge precipitation dataframe and temperature dataframe 
+df_exogenous<-left_join(df_temp,df_preci,by="Date")
+df_exogenous_processed<-df_exogenous %>%
+  filter(Date>=ymd("1990-01-16") & Date<=ymd("2022-01-26"))
+
+#missing data
+#create time dataframe
+start_time<-ymd("1990-01-16")
+end_time<-ymd("2022-01-26")
+df_time<-data.frame(Date=seq(from=start_time, to=end_time, by="1 day"))
+
+#merge dataframe
+df_water_merge<-left_join(df_time,df_water,by="Date")
+df_exogenous_processed_merge<-left_join(df_time,df_exogenous_processed,by="Date")
+head(df_water_merge)
+head(df_exogenous_processed_merge)
+
+#filter missing data
+df_water_merge %>%
+  filter(is.na(Groundwater_level)) #omit data before 1990-02
+df_exogenous_processed_merge %>%
+  filter(is.na(Temperature)) #omit data before 1993
+```
