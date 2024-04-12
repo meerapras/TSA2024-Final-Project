@@ -33,8 +33,8 @@ library(tidyr)
 here()
 raw_site<-read.csv(here('Data/Raw/NGWMN_gwl_site_info.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
 raw_water<-read.csv(here('Data/Raw/NGWMN_gwl_value.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
-raw_temp<-read.csv(here('Data/Raw/temp_1990-2024_Pinal.csv'),stringsAsFactors = TRUE,skip=5,header=FALSE)
-raw_preci<-read.csv(here('Data/Raw/precipitation_1990-2024_Pinal.csv'),stringsAsFactors = TRUE,skip=5,header=FALSE)
+raw_temp<-read.csv(here('Data/Raw/temp_1990-2024.csv'),stringsAsFactors = TRUE,skip=5,header=FALSE)
+raw_preci<-read.csv(here('Data/Raw/precipitation_1990-2024.csv'),stringsAsFactors = TRUE,skip=5,header=FALSE)
 ```
 
 ```{r Select needed data}
