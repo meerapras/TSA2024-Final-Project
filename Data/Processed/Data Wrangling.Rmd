@@ -121,8 +121,9 @@ head(df_water_merge)
 colnames(df_water_merge)
 df_water_site<-df_water_merge %>%
   select(Date,Water,Unit.x,Site,AGENCY_CD.x,MY_SITEID,DEC_LAT_VA,DEC_LONG_V,WELL_DEPTH)
-colnames(df_water_site)<-c("Date","Groundwater_level","Unit","Site_all","Source","Site_ID","Longitude",
-                           "Latitude","Well_depth")
+colnames(df_water_site)<-c("Date","Groundwater_level","Unit","Site_all",
+                           "Source","Site_ID","Longitude","Latitude",
+                           "Well_depth")
 head(df_water_site)
 ```
 
