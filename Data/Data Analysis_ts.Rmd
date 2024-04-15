@@ -1,0 +1,383 @@
+---
+title: "Data Analysis"
+author: "Ina Liao"
+date: "2024-04-10"
+output: html_document
+---
+```{r Setup, include=FALSE}
+knitr:::opts_chunk$set(tidy.opts=list(width.cutoff=80), tidy=FALSE,fig.align = "center", dev = "cairo_pdf", fig.pos = "H")
+```
+
+```{r Install packages, message=FALSE}
+#install.packages("lubridate")
+#install.packages("ggplot2")
+#install.packages("forecast")
+#install.packages("here")
+#install.packages("knitr")
+#install.packages("kableExtra")
+#install.packages("dplyr")
+#install.packages("openxlsx")
+#install.packages("ggthemes")
+#install.packages("tidyr")
+#install.packages("GGally")
+#install.packages("tseries")
+#install.packages("blorr")
+#install.packages("car")
+#install.packages("corrplot")
+#install.packages("dlm")
+#install.packages("randomForest")
+#install.packages("Kendall")
+library(lubridate)
+library(ggplot2)
+library(forecast) 
+library(here)
+library(knitr)
+library(kableExtra)
+library(dplyr)
+library(openxlsx)
+library(ggthemes)
+library(tidyr)
+library(Kendall)
+library(GGally)
+library(trend)
+library(tseries)
+library(blorr)   
+library(lmtest) 
+library(car)
+library(cowplot)
+library(corrplot)
+```
+
+```{r Import Data, echo=TRUE, results='hide'}
+here()
+raw_water<-read.csv(here('Data/Processed/groundwater_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+raw_preci<-read.csv(here('Data/Processed/preci_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+raw_temp<-read.csv(here('Data/Processed/temp_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+
+raw_water<-raw_water[,2:10]
+raw_preci<-raw_preci[,2:3]
+raw_temp<-raw_temp[,2:3]
+```
+
+```{r Data Wrangling}
+#date format 
+raw_water$Date<-ymd(raw_water$Date)
+raw_temp$Date<-ymd(raw_temp$Date)
+raw_preci$Date<-ymd(raw_preci$Dat)
+
+#daily average 
+df_water<-raw_water %>%
+  group_by(Date) %>%
+  summarize(water=mean(Groundwater_level, na.rm=TRUE)) 
+
+#check timeframe 
+print(head(df_water$Date,1)) #1993-02-01
+print(tail(df_water$Date,1)) #2022-01-26
+print(head(raw_temp$Date,1)) #1990-01-01
+print(tail(raw_temp$Date,1)) #2024-03-01
+
+#monthly average 
+df_water_monthly<-df_water %>%
+  group_by(month=format(Date, "%Y-%m")) %>%
+  summarize(monthly_avg = mean(water, na.rm = TRUE))
+
+
+#merge precipitation dataframe and temperature dataframe 
+raw_temp_preci<-left_join(raw_temp,raw_preci,by="Date")
+
+#missing data
+#create time dataframe
+start_time<-ymd("1993-02-01")
+end_time<-ymd("2022-01-26")
+df_time_daily<-data.frame(Date=seq(from=start_time, to=end_time, by="1 day"))
+df_time_monthly<-data.frame(Date=seq(from=start_time, to=end_time, by="1 month"))
+
+#merge dataframe
+df_water_merge<-left_join(df_time_daily,df_water,by="Date")
+df_temp_preci_merge<-left_join(df_time_monthly,raw_temp_preci,by="Date")
+head(df_water_merge)
+head(df_temp_preci_merge)
+
+#filter missing data
+df_water_missing<-df_water_merge %>%
+  filter(is.na(water))  #continuous data since 2001-03-01
+df_temp_preci_merge %>%
+  filter(is.na(Temperature)) #no missing value 
+
+#drop the missing value 
+df_water<-df_water_merge %>%
+  filter(Date>=ymd("2001-03-01") & Date<=ymd("2021-10-22"))
+df_temp_preci<-df_temp_preci_merge %>%
+  filter(Date>=ymd("2001-03-01")& Date<=ymd("2021-10-22"))
+
+#water is daily data
+#temp and preci are monthly data
+```
+
+```{r Create time series object}
+#water
+msts_water<-msts(df_water[,2],seasonal.periods=c(7,365),start =c(2001,03), end=c(2021,10))
+ts_water_monthly<-ts(df_water_monthly[,2], frequency=12,start =c(2001,03), end=c(2021,10))
+autoplot(msts_water)
+autoplot(ts_water_monthly)
+#question
+```
+```{r ACF and PACF}
+#water
+
+#ts
+par(mfrow=c(1,2))
+Acf(ts_water_monthly,lag.max=40,main=paste("ACF for Groundwater"),ylim=c(-0.5,1)) 
+Pacf(ts_water_monthly,lag.max=40,main=paste("PACF for Groundwater"),ylim=c(-0.5,1))
+
+#msts
+par(mfrow=c(1,2))
+Acf(msts_water,lag.max=40,main=paste("ACF for Groundwater"),ylim=c(-0.5,1)) 
+Pacf(msts_water,lag.max=40,main=paste("PACF for Groundwater"),ylim=c(-0.5,1))
+```
+
+```{r Detrend and deseason}
+#ts 
+#decompose 
+water_decompose<-decompose(ts_water_monthly)
+plot(water_decompose)
+
+#deseason
+water_deseason<-seasadj(water_decompose)
+plot_grid(
+  autoplot(water_deseason),
+  autoplot(Acf(water_deseason,plot=FALSE,lag.max=40)),
+  autoplot(Pacf(water_deseason,plot=FALSE,lag.max=40)),
+  nrow=1
+)
+
+#msts
+#decompose 
+msts_water_decompose<-decompose(msts_water)
+plot(msts_water_decompose)
+
+#deseason
+msts_water_deseason<-seasadj(msts_water_decompose)
+plot_grid(
+  autoplot(msts_water_deseason),
+  autoplot(Acf(msts_water_deseason,plot=FALSE,lag.max=40)),
+  autoplot(Pacf(msts_water_deseason,plot=FALSE,lag.max=40)),
+  nrow=1
+)
+```
+
+```{r Stationary test}
+#ts; monthly 
+#Mann-Kendall
+summary(MannKendall(water_deseason)) #reject the null hypothesis, supporting the presence of a trend
+
+#seasonal Mann-Kendall
+#correction: calculate monthly average 
+trend::smk.test(water_deseason) 
+
+#ADF test
+print(adf.test(water_deseason,alternative = "stationary")) #reject the null hypothesis, the trend is stationary 
+
+#msts
+#Mann-Kendall
+summary(MannKendall(ms_water_deseason)) #reject the null hypothesis, supporting the presence of a trend
+
+#seasonal Mann-Kendall
+#correction: calculate monthly average 
+trend::smk.test(ms_water_deseason) 
+
+#ADF test
+print(adf.test(ms_water_deseason,alternative = "stationary")) #reject the null hypothesis, the trend is stationary 
+```
+
+```{r Differencing}
+#ts; monthly
+#find out how many times is needed for differencing 
+ns_diff<-nsdiffs(water_deseason)
+cat("Number of seasonal differencing needed:", ns_diff) #no need to difference the series
+#check: does not need to difference the series but has trend in the data
+```
+
+```{r Training and testing}
+#water
+#from 2001-03-01 to 2021-10-22
+
+#monthly ts
+ts_training<-ts(df_water_monthly[,2],
+                frequency=12,
+                start=c(2001,03), end=c(2020,09))
+
+
+ts_testing<-ts(df_water_monthly[,2],
+               frequency=12,
+               start=c(2020,10), end=c(2021,10))
+
+
+#msts, origin series
+msts_training<-msts(df_water[,2],seasonal.periods=c(7,365),
+                    start=c(2001,03,01), end=c(2020,09,31))
+
+
+msts_testing<-msts(df_water[,2],seasonal.periods=c(7,365),
+                   start=c(2020,10,01), end=c(2021,10,22))
+
+#deseason series
+msts_deseason_training<-msts(ms_water_deseason,seasonal.periods=c(7,365),
+                             start=c(2001,03,01), end=c(2020,09,31))
+
+msts_deseason_testing<-msts(ms_water_deseason,seasonal.periods=c(7,365),
+                            start=c(2020,10,01), end=c(2021,10,22))
+
+
+```
+
+
+```{r ETS}
+ETS_fit<-stlf(msts_training,h=365*3)
+```
+
+```{r ARIMA and Fourier terms}
+#K=c(2,4)
+#fit ARIMA with deseason time series 
+ARIMA_Four_fit_1<-auto.arima(msts_deseason_training,
+                             seasonal=FALSE, 
+                             xreg=fourier(msts_training,K=c(2,4)))
+#forecast with ARIMA_fit
+ARIMA_Four_forecast_1<-forecast(ARIMA_Four_fit_1,
+                                xreg=fourier(msts_training,K=c(2,4),h=365*3),
+                                h=365*3) 
+#K=c(2,12)
+#fit ARIMA with original time series 
+ARIMA_Four_fit_2<-auto.arima(msts_training,
+                             seasonal=FALSE, 
+                             xreg=fourier(msts_training,K=c(2,12)))
+#forecast with ARIMA_fit
+ARIMA_Four_forecast_2<-forecast(ARIMA_Four_fit_2,
+                                xreg=fourier(msts_deseason_training,K=c(2,12),h=365*3),
+                                h=365*3) 
+```
+
+```{r ARIMA + Fourie + exogenous variable}
+#temp
+#create time series object 
+ts_temp_training<-ts(df_temp_preci[,2], frequency=12,
+                     start=c(2001,03), end=c(2020,09))
+
+ts_temp_testing<-ts(df_temp_preci[,2], frequency=12,
+                     start=c(2020,10), end=c(2021,10))
+
+#preci
+#create time series object 
+ts_preci_training<-ts(df_temp_preci[,3], frequency=12,
+                      start=c(2001,03,01), end=c(2020,09,01))
+
+ts_preci_testing<-ts(df_temp_preci[,3], frequency=12,
+                     start=c(2020,10,01), end=c(2021,10,01))
+
+ts_temp<-ts(df_temp_preci[,2], frequency=12)
+ts_preci<-ts(df_temp_preci[,3], frequency=12)
+autoplot(ts_temp)
+autoplot(ts_preci)
+```
+
+
+```{r Neural Network}
+#p=1, P=0 because seasonal=FALSE
+
+#K=c(2,4)
+NN_fit_1<-nnetar(msts_deseason_training,
+                 p=1,
+                 P=0,
+                 xreg=fourier(msts_deseason_training,K=c(2,4)))
+
+NN_forecast_1<-forecast(NN_fit_1,
+                        xreg=fourier(msts_training,K=c(2,4),h=365*3), 
+                        h=365*3)
+
+#K=c(2,12)
+NN_fit_2<-nnetar(msts_training,
+                 p=1,
+                 P=0,
+                 xreg=fourier(msts_training,K=c(2,12)))
+
+NN_forecast_2<-forecast(NN_fit_2,
+                        xreg=fourier(msts_training,K=c(2,12),h=365*3), 
+                        h=365*3)
+```
+
+
+```{r Plot Forecast Results}
+#forecast period 
+forecast_start<-start(ARIMA_Four_forecast_1$mean)
+forecast_end<-end(ARIMA_Four_forecast_1$mean)
+msts_forecast<-window(msts_water, start=forecast_start, end=forecast_end)
+
+#plot forecasting result
+
+#add the seasonality back 
+ETS_fit$mean<-ETS_fit$mean+msts_water_decompose$seasonal
+ARIMA_Four_forecast_1$mean<-ARIMA_Four_forecast_1$mean+msts_water_decompose$seasonal
+NN_forecast_1$mean<-NN_forecast_1$mean+msts_water_decompose$seasonal
+
+
+autoplot(msts_forecast)+
+  autolayer(NN_forecast_1, series="Neural Network")
+  #autolayer(ARIMA_Four_forecast_1, series="ARIMA Fourier",PI=FALSE)+
+  #autolayer(ETS_fit,series="STL+ETS",PI=FALSE)
+  #autolayer(ARIMA_Four_forecast_XREG_1, series="ARIMA Fourier XREG",PI=FALSE)
+  
+  
+
+#with K=c(2,12)
+autoplot(msts_forecast)+
+  autolayer(ETS_fit,series="STL+ETS",PI=FALSE)+
+  autolayer(ARIMA_Four_forecast_2, series="ARIMA Fourier",PI=FALSE)+
+  #autolayer(ARIMA_Four_forecast_XREG_2, series="ARIMA Fourier XREG",PI=FALSE)+
+  autolayer(NN_forecast_2, series="Neural Network")
+```
+
+```{r Model Residuals}
+resi_ETS<-checkresiduals(ETS_fit)
+resi_ARIMA_Four_1<-checkresiduals(ARIMA_Four_forecast_1)
+resi_ARIMA_Four_2<-checkresiduals(ARIMA_Four_forecast_2)
+resi_NN_forecast_1<-checkresiduals(NN_forecast_1)
+resi_NN_forecast_2<-checkresiduals(NN_forecast_2)
+```
+
+```{r Accuracy}
+#Model1:ETS
+scores_ETS<-accuracy(ETS_fit$mean,msts_testing)
+
+#Model2: ARIMA + Fourier, K=c(2,4) 
+scores_ARIMA_Four_forecast_1<-accuracy(ARIMA_Four_forecast_1$mean,msts_testing)
+
+#Model3: ARIMA + Fourier, K=c(2,12)
+scores_ARIMA_Four_forecast_2<-accuracy(ARIMA_Four_forecast_2$mean,msts_testing)
+
+#Model4: Neural network, K=c(2,4) 
+scores_NN_1<-accuracy(NN_forecast_1$mean,msts_testing)
+
+#Model5: Neural network, K=c(2,12)
+scores_NN_2<-accuracy(NN_forecast_2$mean,msts_testing)
+
+
+#create a data frame to store the scores 
+scores<-as.data.frame(rbind(scores_ETS,
+                            scores_ARIMA_Four_forecast_1,
+                            scores_ARIMA_Four_forecast_2,
+                            scores_NN_1,
+                            scores_NN_2))
+row.names(scores)<-c("ETS",
+                     "ARIMA+Fourier, K=c(2,4)",
+                     "ARIMA+Fourier, K=c(2,12)",
+                     "NN, K=c(4)",
+                     "NN, K=c(6)")
+
+#create a comparable table 
+kbl(scores, 
+    caption = "Forecast Accuracy for Electricity Demand",
+    digits = array(5,ncol(scores))) %>%
+  kable_styling(full_width = FALSE, position = "center", latex_options = "hold_position")
+
+#RMSE and MAPE
+```
