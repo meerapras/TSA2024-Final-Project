@@ -114,7 +114,14 @@ df_temp_preci<-df_temp_preci_merge %>%
 #temp and preci are monthly data
 ```
 
+
+
 ```{r Create time series object}
+#monthly average 
+df_water_monthly<-df_water %>%
+  group_by(month=format(Date, "%Y-%m")) %>%
+  summarize(monthly_avg = mean(water, na.rm = TRUE))
+
 #water
 msts_water<-msts(df_water[,2],seasonal.periods=c(7,365),start =c(2001,03), end=c(2021,10))
 ts_water_monthly<-ts(df_water_monthly[,2], frequency=12,start =c(2001,03), end=c(2021,10))
@@ -124,6 +131,8 @@ autoplot(ts_water_monthly)
 ```
 
 ```{r ACF and PACF}
+ts_water_monthly<-ts(df_water_monthly[,2], frequency=12,start =c(2010,01), end=c(2021,10))
+
 #water
 par(mfrow=c(1,2))
 Acf(ts_water_monthly,lag.max=40,main=paste("ACF for Groundwater"),ylim=c(-0.5,1)) 
@@ -182,7 +191,7 @@ cat("Number of seasonal differencing needed:", ns_diff) #no need to difference t
 #monthly ts
 ts_training<-ts(df_water_monthly[,2],
                 frequency=12,
-                start=c(2001,03), end=c(2020,09))
+                start=c(2010,01), end=c(2020,09))
 
 
 ts_testing<-ts(df_water_monthly[,2],
@@ -226,11 +235,11 @@ ARIMA_Four_forecast_3<-forecast(ARIMA_Four_fit_3,
                                 h=12) 
 ```
 
-```{r ARIMA + Fourie + exogenous variable}
+```{r exogenous variable}
 #temp
 #create time series object 
 ts_temp_training<-ts(df_temp_preci[,2], frequency=12,
-                     start=c(2001,03), end=c(2020,09))
+                     start=c(2010,01), end=c(2020,09))
 
 ts_temp_testing<-ts(df_temp_preci[,2], frequency=12,
                      start=c(2020,10), end=c(2021,10))
@@ -238,15 +247,39 @@ ts_temp_testing<-ts(df_temp_preci[,2], frequency=12,
 #preci
 #create time series object 
 ts_preci_training<-ts(df_temp_preci[,3], frequency=12,
-                      start=c(2001,03,01), end=c(2020,09,01))
+                      start=c(2010,01), end=c(2020,09))
 
 ts_preci_testing<-ts(df_temp_preci[,3], frequency=12,
-                     start=c(2020,10,01), end=c(2021,10,01))
+                     start=c(2020,10), end=c(2021,10))
 
-ts_temp<-ts(df_temp_preci[,2], frequency=12)
-ts_preci<-ts(df_temp_preci[,3], frequency=12)
+ts_temp<-ts(df_temp_preci[,2], frequency=12,start=c(2010,01), end=c(2021,10))
+ts_preci<-ts(df_temp_preci[,3], frequency=12,start=c(2010,01), end=c(2021,10))
 autoplot(ts_temp)
 autoplot(ts_preci)
+
+```
+
+```{r Correlation Test}
+#correlation test 
+cor_water_temp<-cor.test(ts_water_monthly,ts_temp,method = "spearman",exact = FALSE)
+cor_water_preci<-cor.test(ts_water_monthly,ts_preci,method = "spearman",exact = FALSE)
+
+
+#create a summary table 
+summary_table_cor<-data.frame(
+  Variable = c("Temperature", "Precipitation"),
+  Correlation_Coefficient = round(c(cor_water_temp$estimate, 
+                                    cor_water_preci$estimate), 5),
+  P_Value = round(c(cor_water_temp$p.value, 
+                    cor_water_preci$p.value), 5)
+)
+
+print(summary_table_cor)
+```
+
+
+```{r ARIMA + Fourie + exogenous variable}
+#decide not to use the exogenous variable 
 
 #K=c(2)
 #fit ARIMA with deseason time series 
