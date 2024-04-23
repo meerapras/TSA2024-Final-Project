@@ -121,22 +121,32 @@ df_temp_preci<-df_temp_preci_merge %>%
 df_water_monthly<-df_water %>%
   group_by(month=format(Date, "%Y-%m")) %>%
   summarize(monthly_avg = mean(water, na.rm = TRUE))
+df_water_monthly$month<-ym(df_water_monthly$month)
 
 #water
 msts_water<-msts(df_water[,2],seasonal.periods=c(7,365),start =c(2001,03), end=c(2021,10))
-ts_water_monthly<-ts(df_water_monthly[,2], frequency=12,start =c(2001,03), end=c(2021,10))
+ts_water_monthly_before<-ts(df_water_monthly[,2], frequency=12,start =c(2001,03), end=c(2021,10))
 autoplot(msts_water)
-autoplot(ts_water_monthly)
-#question
+autoplot(ts_water_monthly_before)+
+  ggtitle("Monthly groundwater level from March 2001 to October 2021")+
+  labs(y="feet",x="")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+df_water_monthly<-df_water_monthly %>%
+  filter(month>=as.Date("2002-02-01"))
+ts_water_monthly<-ts(df_water_monthly[,2], frequency=12,start =c(2002,02), end=c(2021,10))
+autoplot(ts_water_monthly)+
+  ggtitle("Monthly groundwater level from February 2002 to October 2021")+
+  labs(y="feet",x="")+
+  theme(plot.title = element_text(hjust = 0.5))
 ```
 
 ```{r ACF and PACF}
-ts_water_monthly<-ts(df_water_monthly[,2], frequency=12,start =c(2010,01), end=c(2021,10))
 
 #water
 par(mfrow=c(1,2))
-Acf(ts_water_monthly,lag.max=40,main=paste("ACF for Groundwater"),ylim=c(-0.5,1)) 
-Pacf(ts_water_monthly,lag.max=40,main=paste("PACF for Groundwater"),ylim=c(-0.5,1))
+Acf(ts_water_monthly,lag.max=40,main=paste("ACF of Groundwater"),ylim=c(-0.5,1)) 
+Pacf(ts_water_monthly,lag.max=40,main=paste("PACF of Groundwater"),ylim=c(-0.5,1))
 plot_grid(
   autoplot(ts_water_monthly),
   autoplot(Acf(ts_water_monthly,plot=FALSE,lag.max=40)),
@@ -166,14 +176,17 @@ Pacf(water_deseason,lag.max=40,main=paste("PACF for Groundwater"),ylim=c(-0.5,1)
 ```{r Stationary test}
 #ts; monthly 
 #Mann-Kendall
-summary(MannKendall(water_deseason)) #reject the null hypothesis, supporting the presence of a trend
+summary(MannKendall(water_deseason))
+#does not reject the null hypothesis, supporting the series is stationary 
 
 #seasonal Mann-Kendall
 #correction: calculate monthly average 
 trend::smk.test(water_deseason) 
+#does not reject the null hypothesis, supporting the series is stationary 
 
 #ADF test
-print(adf.test(water_deseason,alternative = "stationary")) #reject the null hypothesis, the trend is stationary 
+print(adf.test(water_deseason,alternative = "stationary")) 
+#does not reject the null hypothesis, the series might contain a unit root
 ```
 
 ```{r Differencing}
@@ -191,7 +204,7 @@ cat("Number of seasonal differencing needed:", ns_diff) #no need to difference t
 #monthly ts
 ts_training<-ts(df_water_monthly[,2],
                 frequency=12,
-                start=c(2010,01), end=c(2020,09))
+                start=c(2002,02), end=c(2020,09))
 
 
 ts_testing<-ts(df_water_monthly[,2],
@@ -238,8 +251,11 @@ ARIMA_Four_forecast_3<-forecast(ARIMA_Four_fit_3,
 ```{r exogenous variable}
 #temp
 #create time series object 
+df_temp_preci<-df_temp_preci %>%
+  filter(Date>=as.Date("2002-02-01"))
+
 ts_temp_training<-ts(df_temp_preci[,2], frequency=12,
-                     start=c(2010,01), end=c(2020,09))
+                     start=c(2002,02), end=c(2020,09))
 
 ts_temp_testing<-ts(df_temp_preci[,2], frequency=12,
                      start=c(2020,10), end=c(2021,10))
@@ -247,15 +263,21 @@ ts_temp_testing<-ts(df_temp_preci[,2], frequency=12,
 #preci
 #create time series object 
 ts_preci_training<-ts(df_temp_preci[,3], frequency=12,
-                      start=c(2010,01), end=c(2020,09))
+                      start=c(2002,02), end=c(2020,09))
 
 ts_preci_testing<-ts(df_temp_preci[,3], frequency=12,
                      start=c(2020,10), end=c(2021,10))
 
-ts_temp<-ts(df_temp_preci[,2], frequency=12,start=c(2010,01), end=c(2021,10))
-ts_preci<-ts(df_temp_preci[,3], frequency=12,start=c(2010,01), end=c(2021,10))
-autoplot(ts_temp)
-autoplot(ts_preci)
+ts_temp<-ts(df_temp_preci[,2], frequency=12,start=c(2002,02), end=c(2021,10))
+ts_preci<-ts(df_temp_preci[,3], frequency=12,start=c(2002,02), end=c(2021,10))
+autoplot(ts_temp)+
+  ggtitle("Monthly temperature from February 2002 to October 2021")+
+  labs(y="°F",x="")+
+  theme(plot.title = element_text(hjust = 0.5))
+autoplot(ts_preci)+
+  ggtitle("Monthly temperature from February 2002 to October 2021")+
+  labs(y="mm",x="")+
+  theme(plot.title = element_text(hjust = 0.5))
 
 ```
 
@@ -275,6 +297,36 @@ summary_table_cor<-data.frame(
 )
 
 print(summary_table_cor)
+```
+```{r Sumamry Statistics}
+summary_stat<-data.frame(
+  Variable=c("Groundwater","Temperature","Precipitation"),
+  Mean=round(c(mean(ts_water_monthly),
+        mean(ts_temp),
+        mean(ts_preci)),4),
+  Std_Dev=round(c(sd(ts_water_monthly),
+        sd(ts_temp),
+        sd(ts_preci)),4),
+  Median=round(c(mean(ts_water_monthly),
+        mean(ts_temp),
+        mean(ts_preci)),4),
+  min=round(c(min(ts_water_monthly),
+        min(ts_temp),
+        min(ts_preci)),4),
+  Pctl_25=round(c(quantile(ts_water_monthly,0.25),
+        quantile(ts_temp,0.25),
+        quantile(ts_preci,0.25)),4),
+  Pctl_75=round(c(quantile(ts_water_monthly,0.75),
+        quantile(ts_temp,0.75),
+        quantile(ts_preci,0.75)),4),
+  Max=round(c(max(ts_water_monthly),
+        max(ts_temp),
+        max(ts_preci)),4)
+  
+)
+summary_stat
+
+
 ```
 
 
