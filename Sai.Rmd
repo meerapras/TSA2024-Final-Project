@@ -204,8 +204,8 @@ print(summary(SMKtest))
 ```{r Differencing}
 #ts; monthly
 #find out how many times is needed for differencing 
-ns_diff<-nsdiffs(water_deseason)
-cat("Number of seasonal differencing needed:", ns_diff) #no need to difference the series
+#ns_diff<-nsdiffs(water_deseason)
+#cat("Number of seasonal differencing needed:", ns_diff) #no need to difference the series
 #question: does not need to difference the series but has trend in the data
 
 #this is no need for seasonal differencing
@@ -223,6 +223,7 @@ cat("Number of trend differencing needed:", n_diff)
 #ts_training<-ts(df_water_monthly[,2],
                 #frequency=12,
                 #start=c(2002,02), end=c(2020,09))
+
 #I'm not sure why the start=c(2010,01) says 2010. Shouldn't it be 2001?
 
 
@@ -236,6 +237,8 @@ nfor <- 12
 ts_training2 <- subset(ts_water_monthly, end=length(ts_water_monthly)-nfor)
 ts_testing2 <- subset(ts_water_monthly, start = length(ts_water_monthly)-nfor+1)
 
+autoplot(ts_training2)
+autoplot(ts_testing2)
 #ts(ts_water_monthly[1:(nobs-nfor)],
 #start=c(2002,02),
 #frequency = 12)
@@ -602,7 +605,6 @@ autoplot(ts_testing2)+
   autolayer(NN_forecast_3, series="Neural Network")
 
 
-
   #autolayer(ARIMA_Four_forecast_1, series="ARIMA Fourier",PI=FALSE)+
   #autolayer(ETS_fit,series="STL+ETS",PI=FALSE)+
   #autolayer(ARIMA_Four_forecast_XREG_1, series="ARIMA Fourier XREG",PI=FALSE)
@@ -621,7 +623,6 @@ autoplot(ts_forecast)+
   autolayer(ARIMA_Four_forecast_XREG_3, series="ARIMA Fourier XREG",PI=FALSE)+
   autolayer(NN_forecast_3, series="Neural Network")
 ```
-
 
 
 ```{r Model Residuals}
