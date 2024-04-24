@@ -2,12 +2,14 @@
 title: "Data Analysis"
 author: "Ina Liao"
 date: "2024-04-10"
-output: html_document
-editor_options: 
+output:
+  html_document: default
+  pdf_document: default
+editor_options:
   chunk_output_type: console
 ---
 ```{r Setup, include=FALSE}
-knitr:::opts_chunk$set(tidy.opts=list(width.cutoff=80), tidy=FALSE,fig.align = "center", dev = "cairo_pdf", fig.pos = "H")
+knitr:::opts_chunk$set(tidy.opts=list(width.cutoff=80), tidy=FALSE,fig.align = "center", fig.pos = "H")
 ```
 
 ```{r Install packages, message=FALSE}
