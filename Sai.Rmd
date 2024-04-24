@@ -551,10 +551,10 @@ scores<-as.data.frame(rbind(sarima_score,
                             ARIMA_Four_XREG_2_score,
                             ARIMA_Four_XREG_3_score))
 
-scores_NN_all<-as.data.frame(rbind(
-                            scores_NN_1,
-                            scores_NN_2,
-                            scores_NN_3))
+#scores_NN_all<-as.data.frame(rbind(
+                            #scores_NN_1,
+                            #scores_NN_2,
+                            #scores_NN_3))
 row.names(scores)<-c("SARIMA",
                      "ETS",
                      "SS LL",
@@ -570,10 +570,10 @@ row.names(scores)<-c("SARIMA",
                      "ARIMA Fourier K=c(4), Preci",
                      "ARIMA Fourier K=c(6), Preci")
 
-row.names(scores_NN_all)<-c(
-                     "NN, K=c(2)",
-                     "NN, K=c(4)",
-                     "NN, K=c(6)")
+#row.names(scores_NN_all)<-c(
+                     #"NN, K=c(2)",
+                     #"NN, K=c(4)",
+                     #"NN, K=c(6)")
 
 #create a comparable table 
 kbl(scores, 
@@ -581,10 +581,10 @@ kbl(scores,
     digits = array(5,ncol(scores))) %>%
   kable_styling(full_width = FALSE, position = "center", latex_options = "hold_position")
 
-kbl(scores_NN_all, 
-    caption = "Forecast Accuracy for Electricity Demand",
-    digits = array(5,ncol(scores_NN_all))) %>%
-  kable_styling(full_width = FALSE, position = "center", latex_options = "hold_position")
+#kbl(scores_NN_all, 
+    #caption = "Forecast Accuracy for Electricity Demand",
+    #digits = array(5,ncol(scores_NN_all))) %>%
+  #kable_styling(full_width = FALSE, position = "center", latex_options = "hold_position")
 
 #RMSE and MAPE
 #NN, K=c(2) has the best performance
@@ -602,31 +602,36 @@ ts_forecast<-window(ts_water_monthly, start=forecast_start, end=forecast_end)
 autoplot(ts_testing2)
 
 autoplot(ts_testing2)+
-  autolayer(NN_forecast_3, series="Neural Network")
+  autolayer(NN_forecast_3, series="Neural Network c(6)", PI=FALSE)+
+  autolayer(sarima_for, series = "SARIMA",PI=FALSE)+
+  autolayer(ARIMA_Four_forecast_1, series = "ARIMA + Fourier c(2)",PI=FALSE)
 
-
-  #autolayer(ARIMA_Four_forecast_1, series="ARIMA Fourier",PI=FALSE)+
-  #autolayer(ETS_fit,series="STL+ETS",PI=FALSE)+
-  #autolayer(ARIMA_Four_forecast_XREG_1, series="ARIMA Fourier XREG",PI=FALSE)
-  
-#K=c(4)
-autoplot(ts_forecast)+
-  autolayer(ETS_fit,series="STL+ETS",PI=FALSE)+
-  autolayer(ARIMA_Four_forecast_2, series="ARIMA Fourier",PI=FALSE)+
-  autolayer(ARIMA_Four_forecast_XREG_2, series="ARIMA Fourier XREG",PI=FALSE)+
-  autolayer(NN_forecast_2, series="Neural Network")
-
-#K=c(3)
-autoplot(ts_forecast)+
-  autolayer(ETS_fit,series="STL+ETS",PI=FALSE)+
-  autolayer(ARIMA_Four_forecast_3, series="ARIMA Fourier",PI=FALSE)+
-  autolayer(ARIMA_Four_forecast_XREG_3, series="ARIMA Fourier XREG",PI=FALSE)+
-  autolayer(NN_forecast_3, series="Neural Network")
+#NN c(6) is the best model
 ```
 
 
+```{r plot forecast for next 3 years}
+
+NN_all<-nnetar(ts_water_monthly,
+                 p=1,
+                 P=0,
+                 xreg=fourier(ts_water_monthly,K=c(6)))
+
+NN_for_all<-forecast(NN_all,
+                        xreg=fourier(ts_water_monthly,K=c(6),h=36), 
+                        h=36)
+resi_NN_all<-checkresiduals(NN_all)
+
+autoplot(ts_water_monthly, series = "Observed Data")+
+  autolayer(NN_for_all, series = "NN Forecast")+
+  ylab("Groundwater Levels (feet)")
+
+```
+
 ```{r Model Residuals}
 resi_ETS<-checkresiduals(ETS_fit)
+resi_sarima<-checkresiduals(sarima_for)
+resi_SS_ll<-checkresiduals(SS_ll_for)
 resi_ARIMA_Four_1<-checkresiduals(ARIMA_Four_forecast_1)
 resi_ARIMA_Four_2<-checkresiduals(ARIMA_Four_forecast_2)
 resi_ARIMA_Four_3<-checkresiduals(ARIMA_Four_forecast_3)
