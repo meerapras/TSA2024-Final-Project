@@ -2,7 +2,9 @@
 title: "Data Analysis"
 author: "Ina Liao"
 date: "2024-04-10"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 ```{r Setup, include=FALSE}
 knitr:::opts_chunk$set(tidy.opts=list(width.cutoff=80), tidy=FALSE,fig.align = "center", dev = "cairo_pdf", fig.pos = "H")
