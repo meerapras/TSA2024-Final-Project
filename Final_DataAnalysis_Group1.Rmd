@@ -1,0 +1,657 @@
+---
+title: "Data Analysis"
+author: "Ina Liao"
+date: "2024-04-10"
+output:
+  html_document: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: console
+---
+```{r Setup, include=FALSE}
+knitr:::opts_chunk$set(tidy.opts=list(width.cutoff=80), tidy=FALSE,fig.align = "center", fig.pos = "H")
+```
+
+```{r Install packages, message=FALSE}
+#install.packages("lubridate")
+#install.packages("ggplot2")
+#install.packages("forecast")
+#install.packages("here")
+#install.packages("knitr")
+#install.packages("kableExtra")
+#install.packages("dplyr")
+#install.packages("openxlsx")
+#install.packages("ggthemes")
+#install.packages("tidyr")
+#install.packages("GGally")
+#install.packages("tseries")
+#install.packages("blorr")
+#install.packages("car")
+#install.packages("corrplot")
+#install.packages("dlm")
+#install.packages("randomForest")
+#install.packages("Kendall")
+library(lubridate)
+library(ggplot2)
+library(forecast) 
+library(here)
+library(knitr)
+library(kableExtra)
+library(dplyr)
+library(openxlsx)
+library(ggthemes)
+library(tidyr)
+library(Kendall)
+library(GGally)
+library(trend)
+library(tseries)
+library(blorr)   
+library(lmtest) 
+library(car)
+library(cowplot)
+library(corrplot)
+```
+
+```{r Import Data, echo=TRUE, results='hide'}
+here()
+raw_water<-read.csv(here('Data/Processed/groundwater_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+raw_preci<-read.csv(here('Data/Processed/preci_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+raw_temp<-read.csv(here('Data/Processed/temp_processed.csv'),stringsAsFactors = TRUE,skip=0,header=TRUE)
+
+raw_water<-raw_water[,2:10]
+raw_preci<-raw_preci[,2:3]
+raw_temp<-raw_temp[,2:3]
+```
+
+```{r Data Wrangling}
+#date format 
+raw_water$Date<-ymd(raw_water$Date)
+raw_temp$Date<-ymd(raw_temp$Date)
+raw_preci$Date<-ymd(raw_preci$Dat)
+
+#daily average 
+df_water<-raw_water %>%
+  group_by(Date) %>%
+  summarize(water=mean(Groundwater_level, na.rm=TRUE)) 
+
+#check timeframe 
+print(head(df_water$Date,1)) #1993-02-01
+print(tail(df_water$Date,1)) #2022-01-26
+print(head(raw_temp$Date,1)) #1990-01-01
+print(tail(raw_temp$Date,1)) #2024-03-01
+
+#monthly average 
+df_water_monthly<-df_water %>%
+  group_by(month=format(Date, "%Y-%m")) %>%
+  summarize(monthly_avg = mean(water, na.rm = TRUE))
+
+
+#merge precipitation dataframe and temperature dataframe 
+raw_temp_preci<-left_join(raw_temp,raw_preci,by="Date")
+
+#missing data
+#create time dataframe
+start_time<-ymd("1993-02-01")
+end_time<-ymd("2022-01-26")
+df_time_daily<-data.frame(Date=seq(from=start_time, to=end_time, by="1 day"))
+df_time_monthly<-data.frame(Date=seq(from=start_time, to=end_time, by="1 month"))
+
+#merge dataframe
+df_water_merge<-left_join(df_time_daily,df_water,by="Date")
+df_temp_preci_merge<-left_join(df_time_monthly,raw_temp_preci,by="Date")
+head(df_water_merge)
+head(df_temp_preci_merge)
+
+#filter missing data
+df_water_missing<-df_water_merge %>%
+  filter(is.na(water))  #continuous data since 2001-03-01
+df_temp_preci_merge %>%
+  filter(is.na(Temperature)) #no missing value 
+
+#drop the missing value 
+df_water<-df_water_merge %>%
+  filter(Date>=ymd("2001-03-01") & Date<=ymd("2021-10-22"))
+df_temp_preci<-df_temp_preci_merge %>%
+  filter(Date>=ymd("2001-03-01")& Date<=ymd("2021-10-22"))
+
+df_temp_preci2<-df_temp_preci_merge %>%
+  filter(Date>=ymd("2002-02-01")& Date<=ymd("2021-10-22"))
+#water is daily data
+#temp and preci are monthly data
+```
+
+```{r}
+#plotting original data
+
+plot(df_water[,2], type = "l")
+plot
+
+```
+
+```{r Create time series object}
+#monthly average 
+df_water_monthly<-df_water %>%
+  group_by(month=format(Date, "%Y-%m")) %>%
+  summarize(monthly_avg = mean(water, na.rm = TRUE))
+
+df_water_monthly$month <- ym(df_water_monthly$month)
+
+df_water_monthly <- df_water_monthly %>%
+  filter(month>=as.Date("2002-02-01"))
+
+#water
+#msts_water<-msts(df_water[,2],seasonal.periods=c(7,365),start =c(2001,03), end=c(2021,10))
+ts_water_monthly<-ts(df_water_monthly[,2], frequency=12,start =c(2002,02,01), end=c(2021,10,01))
+head(ts_water_monthly)
+tail(ts_water_monthly)
+#autoplot(msts_water)
+autoplot(ts_water_monthly)
+#question
+```
+
+```{r ACF and PACF}
+#ts_water_monthly<-ts(df_water_monthly[,2], frequency=12,start =c(2010,01), end=c(2021,10))
+
+#water
+par(mfrow=c(1,2))
+Acf(ts_water_monthly,lag.max=40,main=paste("ACF for Groundwater"),ylim=c(-0.5,1)) 
+Pacf(ts_water_monthly,lag.max=40,main=paste("PACF for Groundwater"),ylim=c(-0.5,1))
+plot_grid(
+  autoplot(ts_water_monthly),
+  autoplot(Acf(ts_water_monthly,plot=FALSE,lag.max=40)),
+  autoplot(Pacf(ts_water_monthly,plot=FALSE,lag.max=40)),
+  nrow=1
+)
+```
+
+```{r Detrend and deseason}
+#decompose 
+water_decompose<-decompose(ts_water_monthly)
+plot(water_decompose)
+
+#deseason
+water_deseason<-seasadj(water_decompose)
+plot_grid(
+  autoplot(water_deseason),
+  autoplot(Acf(water_deseason,plot=FALSE,lag.max=40)),
+  autoplot(Pacf(water_deseason,plot=FALSE,lag.max=40)),
+  nrow=1
+)
+par(mfrow=c(1,2))
+Acf(water_deseason,lag.max=40,main=paste("ACF for Groundwater"),ylim=c(-0.5,1)) 
+Pacf(water_deseason,lag.max=40,main=paste("PACF for Groundwater"),ylim=c(-0.5,1))
+
+
+```
+
+```{r Stationary test}
+#ts; monthly 
+#Mann-Kendall
+summary(MannKendall(water_deseason)) #reject the null hypothesis, supporting the presence of a trend
+
+#seasonal Mann-Kendall
+#correction: calculate monthly average 
+trend::smk.test(water_deseason) 
+
+#ADF test
+print(adf.test(water_deseason,alternative = "stationary")) #reject the null hypothesis, the trend is stationary 
+#not sure why we are running it on deseasoned data here since this test can handle seasonality
+
+print(adf.test(ts_water_monthly,alternative = "stationary"))
+#p-value>0.05 so null hypothesis cant be rejected and trend is stochastic
+
+SMKtest<- SeasonalMannKendall(ts_water_monthly)
+print(summary(SMKtest))
+
+```
+
+```{r Differencing}
+#ts; monthly
+#find out how many times is needed for differencing 
+#ns_diff<-nsdiffs(water_deseason)
+#cat("Number of seasonal differencing needed:", ns_diff) #no need to difference the series
+#question: does not need to difference the series but has trend in the data
+
+#this is no need for seasonal differencing
+
+n_diff<- ndiffs(ts_water_monthly)
+cat("Number of trend differencing needed:", n_diff)
+#differencing is still needed for the stationary trend, d=1
+```
+
+```{r Training and testing}
+#water
+#from 2001-03-01 to 2021-10-22
+
+#monthly ts
+#ts_training<-ts(df_water_monthly[,2],
+                #frequency=12,
+                #start=c(2002,02), end=c(2020,09))
+
+#I'm not sure why the start=c(2010,01) says 2010. Shouldn't it be 2001?
+
+
+#ts_testing<-ts(df_water_monthly[,2],
+               #frequency=12,
+               #start=c(2020,10), end=c(2021,10))
+
+nobs <- nrow(df_water_monthly)
+nfor <- 12
+
+ts_training2 <- subset(ts_water_monthly, end=length(ts_water_monthly)-nfor)
+ts_testing2 <- subset(ts_water_monthly, start = length(ts_water_monthly)-nfor+1)
+
+tail(ts_testing2)
+
+autoplot(ts_training2)
+autoplot(ts_testing2)
+#ts(ts_water_monthly[1:(nobs-nfor)],
+#start=c(2002,02),
+#frequency = 12)
+  
+#ts_water_monthly[(nobs-nfor+1):nobs]
+#head(ts_testing2)
+
+```
+
+```{r}
+par(mfrow=c(1,1))
+
+#SARIMA
+
+sarima_fit <- auto.arima(ts_training2)
+checkresiduals(sarima_fit)
+
+sarima_for <- forecast(sarima_fit,h=nfor)
+plot(sarima_for)
+
+sarima_score <- accuracy(sarima_for$mean, ts_testing2)
+
+```
+
+```{r ETS}
+
+ETS_fit <- stlf(ts_training2,h=nfor)
+
+ETS_score <- accuracy(ETS_fit$mean, ts_testing2)
+
+autoplot(ts_water_monthly)+
+  autolayer(ETS_fit, series="STL +ETS", PI=FALSE)+
+  autolayer(sarima_for, series = "SARIMA", PI=FALSE)
+
+```
+
+```{r SS}
+
+SS_ll <- StructTS(ts_training2, type="level")
+SS_llt <- StructTS(ts_training2, type="trend")
+SS_bsm <- StructTS(ts_training2, type="BSM")
+
+SS_ll_for <- forecast(SS_ll,h=nfor)
+plot(SS_ll_for)
+SS_ll_score <- accuracy(SS_ll_for$mean,ts_testing2)
+
+SS_llt_for <- forecast(SS_llt,h=nfor)
+plot(SS_llt_for)
+SS_llt_score <- accuracy(SS_llt_for$mean,ts_testing2)
+
+SS_bsm_for <- forecast(SS_bsm,h=nfor)
+plot(SS_bsm_for)
+SS_bsm_score <- accuracy(SS_bsm_for$mean,ts_testing2)
+
+#ETS is better if looking at MAPE
+```
+
+
+```{r}
+#ARIMA +Fourier
+ARIMA_Four_fit_1<-auto.arima(ts_training2,
+                             seasonal=FALSE, 
+                             xreg=fourier(ts_training2,K=c(2)))
+#forecast with ARIMA_fit
+ARIMA_Four_forecast_1<-forecast(ARIMA_Four_fit_1,
+                                xreg=fourier(ts_training2,K=c(2),h=nfor),
+                                h=nfor) 
+
+#K=c(4)
+ARIMA_Four_fit_2<-auto.arima(ts_training2,
+                             seasonal=FALSE, 
+                             xreg=fourier(ts_training2,K=c(4)))
+#forecast with ARIMA_fit
+ARIMA_Four_forecast_2<-forecast(ARIMA_Four_fit_2,
+                                xreg=fourier(ts_training2,K=c(4),h=nfor),
+                                h=nfor)
+
+#K=c(6)
+ARIMA_Four_fit_3<-auto.arima(ts_training2,
+                             seasonal=FALSE, 
+                             xreg=fourier(ts_training2,K=c(6)))
+#forecast with ARIMA_fit
+ARIMA_Four_forecast_3<-forecast(ARIMA_Four_fit_3,
+                                xreg=fourier(ts_training2,K=c(6),h=nfor),
+                                h=nfor)
+
+scores_ARIMA_Four_forecast_1<-accuracy(ARIMA_Four_forecast_1$mean,ts_testing2)
+scores_ARIMA_Four_forecast_2<-accuracy(ARIMA_Four_forecast_2$mean,ts_testing2)
+scores_ARIMA_Four_forecast_3<-accuracy(ARIMA_Four_forecast_3$mean,ts_testing2)
+
+
+
+```
+
+```{r exogenous variable}
+#temp
+#create time series object 
+#ts_temp_training<-ts(df_temp_preci[,2], frequency=12,
+                     #start=c(2010,01), end=c(2020,09))
+
+#ts_temp_testing<-ts(df_temp_preci[,2], frequency=12,
+                     #start=c(2020,10), end=c(2021,10))
+
+ts_temp_monthly<-ts(df_temp_preci2[,2], frequency=12,start =c(2002,02), end=c(2021,10))
+ts_preci_monthly<-ts(df_temp_preci2[,3], frequency=12,start =c(2002,02), end=c(2021,10))
+
+#preci
+#create time series object 
+#ts_preci_training<-ts(df_temp_preci[,3], frequency=12,
+                      #start=c(2010,01), end=c(2020,09))
+
+#ts_preci_testing<-ts(df_temp_preci[,3], frequency=12,
+                     #start=c(2020,10), end=c(2021,10))
+
+#ts_temp<-ts(df_temp_preci[,2], frequency=12,start=c(2010,01), end=c(2021,10))
+#ts_preci<-ts(df_temp_preci[,3], frequency=12,start=c(2010,01), end=c(2021,10))
+
+autoplot(ts_temp_monthly)
+autoplot(ts_preci_monthly)
+
+
+ts_temp_training2 <- subset(ts_temp_monthly, end=length(ts_temp_monthly)-nfor)
+ts_temp_testing2 <- subset(ts_temp_monthly, start = length(ts_temp_monthly)-nfor+1)
+
+ts_preci_training2 <- subset(ts_preci_monthly, end=length(ts_preci_monthly)-nfor)
+ts_preci_testing2 <- subset(ts_preci_monthly, start = length(ts_preci_monthly)-nfor+1)
+
+```
+
+```{r Correlation Test}
+#correlation test 
+cor_water_temp<-cor.test(ts_water_monthly,ts_temp_monthly,method = "spearman",exact = FALSE)
+cor_water_preci<-cor.test(ts_water_monthly,ts_preci_monthly,method = "spearman",exact = FALSE)
+
+
+#create a summary table 
+summary_table_cor<-data.frame(
+  Variable = c("Temperature", "Precipitation"),
+  Correlation_Coefficient = round(c(cor_water_temp$estimate, 
+                                    cor_water_preci$estimate), 5),
+  P_Value = round(c(cor_water_temp$p.value, 
+                    cor_water_preci$p.value), 5)
+)
+
+print(summary_table_cor)
+```
+
+
+```{r ARIMA + Fourie + exogenous variable}
+#decide not to use the exogenous variable 
+
+#K=c(2)
+#fit ARIMA with deseason time series 
+
+xreg1 <- as.matrix(data.frame(fourier(ts_training2, K=c(2)),"preci"=ts_preci_training2))
+
+ARIMA_Four_fit_XREG_1<-auto.arima(ts_training2,
+                                  seasonal=FALSE,
+                                  #combine fourier and exogenous variable time series  
+                                  xreg=xreg1) 
+
+#generate fourier terms
+#fourier_terms_1<-fourier(ts_training2, K=c(2), h=12)
+#generate forecast
+preci_forecast_1<-forecast(ts_preci_training2, h=12)
+#combine fourier terms and forecasts into a numeric matrix
+xreg1_for<-as.matrix(data.frame(fourier(ts_training2, K=c(2), h=12), "preci"=preci_forecast_1$mean))
+
+#forecast with ARIMA_fit_XREG
+ARIMA_Four_forecast_XREG_1<-forecast(ARIMA_Four_fit_XREG_1,
+                                     xreg=xreg1_for,
+                                     h=12)
+
+
+#K=c(4)
+
+xreg2 <- as.matrix(data.frame(fourier(ts_training2, K=c(4)),"preci"=ts_preci_training2))
+
+ARIMA_Four_fit_XREG_2<-auto.arima(ts_training2,
+                                  seasonal=FALSE,
+                                  #combine fourier and exogenous variable time series  
+                                  xreg=xreg2) 
+
+#generate fourier terms
+#fourier_terms_1<-fourier(ts_training2, K=c(2), h=12)
+#generate forecast
+preci_forecast_2<-forecast(ts_preci_training2, h=12)
+#combine fourier terms and forecasts into a numeric matrix
+xreg2_for<-as.matrix(data.frame(fourier(ts_training2, K=c(4), h=12), "preci"=preci_forecast_2$mean))
+
+#forecast with ARIMA_fit_XREG
+ARIMA_Four_forecast_XREG_2<-forecast(ARIMA_Four_fit_XREG_2,
+                                     xreg=xreg2_for,
+                                     h=12)
+
+#K=c(6)
+xreg3 <- as.matrix(data.frame(fourier(ts_training2, K=c(6)),"preci"=ts_preci_training2))
+
+ARIMA_Four_fit_XREG_3<-auto.arima(ts_training2,
+                                  seasonal=FALSE,
+                                  #combine fourier and exogenous variable time series  
+                                  xreg=xreg3) 
+
+#generate fourier terms
+#fourier_terms_1<-fourier(ts_training2, K=c(2), h=12)
+#generate forecast
+preci_forecast_3<-forecast(ts_preci_training2, h=12)
+#combine fourier terms and forecasts into a numeric matrix
+xreg3_for<-as.matrix(data.frame(fourier(ts_training2, K=c(6), h=12), "preci"=preci_forecast_3$mean))
+
+#forecast with ARIMA_fit_XREG
+ARIMA_Four_forecast_XREG_3<-forecast(ARIMA_Four_fit_XREG_3,
+                                     xreg=xreg3_for,
+                                     h=12)
+
+ 
+ARIMA_Four_XREG_1_score<-accuracy(ARIMA_Four_forecast_XREG_1$mean,ts_testing2)
+ARIMA_Four_XREG_2_score<-accuracy(ARIMA_Four_forecast_XREG_2$mean,ts_testing2)
+ARIMA_Four_XREG_3_score<-accuracy(ARIMA_Four_forecast_XREG_3$mean,ts_testing2)
+
+```
+
+
+```{r Neural Network}
+#p=1, P=0 because seasonal=FALSE
+
+#K=c(2)
+NN_fit_1<-nnetar(ts_training2,
+                 p=1,
+                 P=0,
+                 xreg=fourier(ts_training2,K=c(2)))
+
+NN_forecast_1<-forecast(NN_fit_1,
+                        xreg=fourier(ts_training2,K=c(2),h=12), 
+                        h=12)
+
+#K=c(4)
+NN_fit_2<-nnetar(ts_training2,
+                 p=1,
+                 P=0,
+                 xreg=fourier(ts_training2,K=c(4)))
+
+NN_forecast_2<-forecast(NN_fit_2,
+                        xreg=fourier(ts_training2,K=c(4),h=12), 
+                        h=12)
+
+#K=c(6)
+NN_fit_3<-nnetar(ts_training2,
+                 p=1,
+                 P=0,
+                 xreg=fourier(ts_training2,K=c(6)))
+
+NN_forecast_3<-forecast(NN_fit_3,
+                        xreg=fourier(ts_training2,K=c(6),h=12), 
+                        h=12)
+
+
+NN1_score <- accuracy(NN_forecast_1$mean,ts_testing2)
+NN2_score <- accuracy(NN_forecast_2$mean,ts_testing2)
+NN3_score <- accuracy(NN_forecast_3$mean,ts_testing2)
+
+```
+
+
+
+```{r Accuracy}
+#Model1:ETS
+#scores_ETS<-accuracy(ETS_fit$mean,ts_testing)
+
+#Model2: ARIMA + Fourier, K=c(2) 
+#scores_ARIMA_Four_forecast_1<-accuracy(ARIMA_Four_forecast_1$mean,ts_testing)
+
+#Model3: ARIMA + Fourier, K=c(4)
+#scores_ARIMA_Four_forecast_2<-accuracy(ARIMA_Four_forecast_2$mean,ts_testing)
+
+#Model4: ARIMA + Fourier, K=c(6)
+#scores_ARIMA_Four_forecast_3<-accuracy(ARIMA_Four_forecast_3$mean,ts_testing)
+
+#Model5: Neural network, K=c(2) 
+#scores_NN_1<-accuracy(NN_forecast_1$mean,ts_testing)
+
+#Model6: Neural network, K=c(4)
+#scores_NN_2<-accuracy(NN_forecast_2$mean,ts_testing)
+
+#Model7: Neural network, K=c(6)
+#scores_NN_3<-accuracy(NN_forecast_3$mean,ts_testing)
+
+#Model8: ARIMA + Fourier + XREG, K=c(2) 
+#scores_ARIMA_Four_XREG_1<-accuracy(ARIMA_Four_forecast_XREG_1$mean,ts_testing)
+
+#Model8: ARIMA + Fourier + XREG, K=c(4) 
+#scores_ARIMA_Four_XREG_2<-accuracy(ARIMA_Four_forecast_XREG_2$mean,ts_testing)
+
+#Model9: ARIMA + Fourier + XREG, K=c(6)
+#scores_ARIMA_Four_XREG_3<-accuracy(ARIMA_Four_forecast_XREG_3$mean,ts_testing)
+
+#create a data frame to store the scores 
+scores<-as.data.frame(rbind(sarima_score,
+                            ETS_score,
+                            SS_ll_score,
+                            SS_llt_score,
+                            SS_bsm_score,
+                            scores_ARIMA_Four_forecast_1,
+                            scores_ARIMA_Four_forecast_2,
+                            scores_ARIMA_Four_forecast_3,
+                            NN1_score,
+                            NN2_score,
+                            NN3_score,
+                            ARIMA_Four_XREG_1_score,
+                            ARIMA_Four_XREG_2_score,
+                            ARIMA_Four_XREG_3_score))
+
+#scores_NN_all<-as.data.frame(rbind(
+                            #scores_NN_1,
+                            #scores_NN_2,
+                            #scores_NN_3))
+row.names(scores)<-c("SARIMA",
+                     "ETS",
+                     "SS LL",
+                     "SS LLT",
+                     "SS BSM",
+                     "ARIMA Fourier K=c(2)",
+                     "ARIMA Fourier K=c(4)",
+                     "ARIMA Fourier K=c(6)",
+                     "NN, K=c(2)",
+                     "NN, K=c(4)",
+                     "NN, K=c(6)",
+                     "ARIMA Fourier K=c(2), Preci",
+                     "ARIMA Fourier K=c(4), Preci",
+                     "ARIMA Fourier K=c(6), Preci")
+
+#row.names(scores_NN_all)<-c(
+                     #"NN, K=c(2)",
+                     #"NN, K=c(4)",
+                     #"NN, K=c(6)")
+
+#create a comparable table 
+kbl(scores, 
+    caption = "Forecast Accuracy for Groundwater Level",
+    digits = array(5,ncol(scores))) %>%
+  kable_styling(full_width = FALSE, position = "center", latex_options = "hold_position")
+
+#kbl(scores_NN_all, 
+    #caption = "Forecast Accuracy for Electricity Demand",
+    #digits = array(5,ncol(scores_NN_all))) %>%
+  #kable_styling(full_width = FALSE, position = "center", latex_options = "hold_position")
+
+#RMSE and MAPE
+#NN, K=c(2) has the best performance
+```
+
+
+
+```{r Plot Forecast Results}
+#forecast period 
+forecast_start<-start(ARIMA_Four_forecast_1$mean)
+forecast_end<-end(ARIMA_Four_forecast_1$mean)
+ts_forecast<-window(ts_water_monthly, start=forecast_start, end=forecast_end)
+
+#plot forecasting result
+autoplot(ts_testing2)
+
+autoplot(ts_testing2)+
+  autolayer(NN_forecast_3,series="Neural Network c(6)")+
+  autolayer(sarima_for, series = "SARIMA", PI=FALSE)+
+  autolayer(ARIMA_Four_forecast_1, series = "ARIMA + Fourier c(2)",PI=FALSE)
+
+#NN c(6) is the best model
+```
+
+
+```{r plot forecast for next 3 years}
+
+NN_all<-nnetar(ts_water_monthly,
+                 p=1,
+                 P=0,
+                 xreg=fourier(ts_water_monthly,K=c(6)))
+
+NN_for_all<-forecast(NN_all,
+                        xreg=fourier(ts_water_monthly,K=c(6),h=36), 
+                        h=36)
+
+autoplot(NN_for_all, PI=TRUE)
+head(NN_for_all$mean)
+tail(NN_for_all$mean)
+
+
+resi_NN_all<-checkresiduals(NN_all)
+
+autoplot(ts_water_monthly, series = "Observed Data")+
+  autolayer(NN_for_all, series = "NN Forecast")+
+  ylab("Groundwater Levels (feet)")
+
+```
+
+```{r Model Residuals}
+resi_ETS<-checkresiduals(ETS_fit)
+resi_sarima<-checkresiduals(sarima_for)
+resi_SS_ll<-checkresiduals(SS_ll_for)
+resi_ARIMA_Four_1<-checkresiduals(ARIMA_Four_forecast_1)
+resi_ARIMA_Four_2<-checkresiduals(ARIMA_Four_forecast_2)
+resi_ARIMA_Four_3<-checkresiduals(ARIMA_Four_forecast_3)
+resi_ARIMA_Four_XREG_1<-checkresiduals(ARIMA_Four_forecast_XREG_1)
+resi_ARIMA_Four_XREG_2<-checkresiduals(ARIMA_Four_forecast_XREG_2)
+resi_ARIMA_Four_XREG_3<-checkresiduals(ARIMA_Four_forecast_XREG_3)
+resi_NN_forecast_1<-checkresiduals(NN_forecast_1)
+resi_NN_forecast_2<-checkresiduals(NN_forecast_2)
+resi_NN_forecast_3<-checkresiduals(NN_forecast_3)
+```
+

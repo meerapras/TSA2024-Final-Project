@@ -141,7 +141,9 @@ df_water_monthly <- df_water_monthly %>%
 
 #water
 #msts_water<-msts(df_water[,2],seasonal.periods=c(7,365),start =c(2001,03), end=c(2021,10))
-ts_water_monthly<-ts(df_water_monthly[,2], frequency=12,start =c(2002,02), end=c(2021,10))
+ts_water_monthly<-ts(df_water_monthly[,2], frequency=12,start =c(2002,02,01), end=c(2021,10,01))
+head(ts_water_monthly)
+tail(ts_water_monthly)
 #autoplot(msts_water)
 autoplot(ts_water_monthly)
 #question
@@ -238,6 +240,8 @@ nfor <- 12
 
 ts_training2 <- subset(ts_water_monthly, end=length(ts_water_monthly)-nfor)
 ts_testing2 <- subset(ts_water_monthly, start = length(ts_water_monthly)-nfor+1)
+
+tail(ts_testing2)
 
 autoplot(ts_training2)
 autoplot(ts_testing2)
@@ -604,8 +608,8 @@ ts_forecast<-window(ts_water_monthly, start=forecast_start, end=forecast_end)
 autoplot(ts_testing2)
 
 autoplot(ts_testing2)+
-  autolayer(NN_forecast_3, series="Neural Network c(6)", PI=FALSE)+
-  autolayer(sarima_for, series = "SARIMA",PI=FALSE)+
+  autolayer(NN_forecast_3,series="Neural Network c(6)")+
+  autolayer(sarima_for, series = "SARIMA", PI=FALSE)+
   autolayer(ARIMA_Four_forecast_1, series = "ARIMA + Fourier c(2)",PI=FALSE)
 
 #NN c(6) is the best model
@@ -622,6 +626,12 @@ NN_all<-nnetar(ts_water_monthly,
 NN_for_all<-forecast(NN_all,
                         xreg=fourier(ts_water_monthly,K=c(6),h=36), 
                         h=36)
+
+autoplot(NN_for_all, PI=TRUE)
+head(NN_for_all$mean)
+tail(NN_for_all$mean)
+
+
 resi_NN_all<-checkresiduals(NN_all)
 
 autoplot(ts_water_monthly, series = "Observed Data")+
