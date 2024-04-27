@@ -1,0 +1,32 @@
+---
+title: "Project RMD"
+output: pdf_document
+date: "2024-04-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(lubridate)
+library(ggplot2)
+library(forecast)
+library(Kendall)
+library(tseries)
+library(outliers)
+library(tidyverse)
+library(cowplot)
+library(sarima)
+library(readxl)
+```
+```{r}
+#Importing data
+setwd('C:/Users/meera/OneDrive/ENV797')
+getwd()
+
+dataframe <- read.csv('Table_10.1_Renewable_Energy_Production_and_Consumption_by_Source.csv', header=TRUE)
+dataframe_final <- dataframe %>% select(1,5)
+head(dataframe_final)
+```
+
