@@ -154,6 +154,14 @@ plot_grid(
   nrow=1
 )
 ```
+```{r Outliers}
+
+clean_water<-tsclean(ts_water_monthly)
+autoplot(clean_water, series="Clean") +
+  autolayer(ts_water_monthly, series="Original") +
+  labs(title="Groundwater Level", y="feet")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
 
 ```{r Detrend and deseason}
 #decompose 
@@ -298,6 +306,7 @@ summary_table_cor<-data.frame(
 
 print(summary_table_cor)
 ```
+
 ```{r Sumamry Statistics}
 summary_stat<-data.frame(
   Variable=c("Groundwater","Temperature","Precipitation"),
